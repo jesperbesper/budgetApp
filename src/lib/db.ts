@@ -5,6 +5,24 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
+
+export async function signUp(email: string, password: string) {
+  return supabase.auth.signUp({ email, password });
+}
+
+export async function signIn(email: string, password: string) {
+  return supabase.auth.signInWithPassword({ email, password });
+}
+
+export async function signOut() {
+  return supabase.auth.signOut();
+}
+
+export async function getCurrentUser() {
+  const { data } = await supabase.auth.getUser();
+  return data.user;
+}
+
 // Interfaces
 export interface Account {
   id?: number;
@@ -67,9 +85,11 @@ export interface WishlistItem {
 // ==================== ACCOUNTS ====================
 
 export async function getAccounts(): Promise<Account[]> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('accounts')
     .select('*')
+    .eq('user_id', user?.id)
     .order('id', { ascending: true });
 
   if (error) throw error;
@@ -77,10 +97,12 @@ export async function getAccounts(): Promise<Account[]> {
 }
 
 export async function getAccountById(id: number): Promise<Account | null> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('accounts')
     .select('*')
     .eq('id', id)
+    .eq('user_id', user?.id)
     .single();
 
   if (error) throw error;
@@ -88,10 +110,12 @@ export async function getAccountById(id: number): Promise<Account | null> {
 }
 
 export async function createAccount(account: Omit<Account, 'id'>): Promise<Account> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('accounts')
     .insert({
-      ...account
+      ...account,
+      user_id: user?.id,
     })
     .select()
     .single();
@@ -101,10 +125,12 @@ export async function createAccount(account: Omit<Account, 'id'>): Promise<Accou
 }
 
 export async function updateAccount(id: number, updates: Partial<Account>): Promise<Account> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('accounts')
     .update(updates)
     .eq('id', id)
+    .eq('user_id', user?.id)
     .select()
     .single();
 
@@ -113,10 +139,12 @@ export async function updateAccount(id: number, updates: Partial<Account>): Prom
 }
 
 export async function deleteAccount(id: number): Promise<void> {
+  const user = await getCurrentUser();
   const { error } = await supabase
     .from('accounts')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', user?.id);
 
   if (error) throw error;
 }
@@ -124,9 +152,11 @@ export async function deleteAccount(id: number): Promise<void> {
 // ==================== CATEGORIES ====================
 
 export async function getCategories(): Promise<Category[]> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('categories')
     .select('*')
+    .eq('user_id', user?.id)
     .order('group_name', { ascending: true })
     .order('name', { ascending: true });
 
@@ -135,10 +165,12 @@ export async function getCategories(): Promise<Category[]> {
 }
 
 export async function getCategoryById(id: number): Promise<Category | null> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('categories')
     .select('*')
     .eq('id', id)
+    .eq('user_id', user?.id)
     .single();
 
   if (error) throw error;
@@ -146,10 +178,12 @@ export async function getCategoryById(id: number): Promise<Category | null> {
 }
 
 export async function createCategory(category: Omit<Category, 'id'>): Promise<Category> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('categories')
     .insert({
-      ...category
+      ...category,
+      user_id: user?.id,
     })
     .select()
     .single();
@@ -159,10 +193,12 @@ export async function createCategory(category: Omit<Category, 'id'>): Promise<Ca
 }
 
 export async function updateCategory(id: number, updates: Partial<Category>): Promise<Category> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('categories')
     .update(updates)
     .eq('id', id)
+    .eq('user_id', user?.id)
     .select()
     .single();
 
@@ -171,10 +207,12 @@ export async function updateCategory(id: number, updates: Partial<Category>): Pr
 }
 
 export async function deleteCategory(id: number): Promise<void> {
+  const user = await getCurrentUser();
   const { error } = await supabase
     .from('categories')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', user?.id);
 
   if (error) throw error;
 }
@@ -182,9 +220,11 @@ export async function deleteCategory(id: number): Promise<void> {
 // ==================== TRANSACTIONS ====================
 
 export async function getTransactions(): Promise<Transaction[]> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
+    .eq('user_id', user?.id)
     .order('date', { ascending: false })
     .order('id', { ascending: false });
 
@@ -193,10 +233,12 @@ export async function getTransactions(): Promise<Transaction[]> {
 }
 
 export async function getTransactionById(id: number): Promise<Transaction | null> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
     .eq('id', id)
+    .eq('user_id', user?.id)
     .single();
 
   if (error) throw error;
@@ -204,9 +246,11 @@ export async function getTransactionById(id: number): Promise<Transaction | null
 }
 
 export async function getTransactionsByDateRange(startDate: string, endDate: string): Promise<Transaction[]> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
+    .eq('user_id', user?.id)
     .gte('date', startDate)
     .lte('date', endDate)
     .order('date', { ascending: false });
@@ -216,10 +260,12 @@ export async function getTransactionsByDateRange(startDate: string, endDate: str
 }
 
 export async function createTransaction(transaction: Omit<Transaction, 'id'>): Promise<Transaction> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('transactions')
     .insert({
-      ...transaction
+      ...transaction,
+      user_id: user?.id,
     })
     .select()
     .single();
@@ -229,10 +275,12 @@ export async function createTransaction(transaction: Omit<Transaction, 'id'>): P
 }
 
 export async function updateTransaction(id: number, updates: Partial<Transaction>): Promise<Transaction> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('transactions')
     .update(updates)
     .eq('id', id)
+    .eq('user_id', user?.id)
     .select()
     .single();
 
@@ -241,10 +289,12 @@ export async function updateTransaction(id: number, updates: Partial<Transaction
 }
 
 export async function deleteTransaction(id: number): Promise<void> {
+  const user = await getCurrentUser();
   const { error } = await supabase
     .from('transactions')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', user?.id);
 
   if (error) throw error;
 }
@@ -252,9 +302,11 @@ export async function deleteTransaction(id: number): Promise<void> {
 // ==================== RECURRING ITEMS ====================
 
 export async function getRecurringItems(): Promise<RecurringItem[]> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('recurring_items')
     .select('*')
+    .eq('user_id', user?.id)
     .order('day_of_month', { ascending: true });
 
   if (error) throw error;
@@ -262,10 +314,12 @@ export async function getRecurringItems(): Promise<RecurringItem[]> {
 }
 
 export async function getRecurringItemById(id: number): Promise<RecurringItem | null> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('recurring_items')
     .select('*')
     .eq('id', id)
+    .eq('user_id', user?.id)
     .single();
 
   if (error) throw error;
@@ -273,10 +327,12 @@ export async function getRecurringItemById(id: number): Promise<RecurringItem | 
 }
 
 export async function createRecurringItem(item: Omit<RecurringItem, 'id'>): Promise<RecurringItem> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('recurring_items')
     .insert({
-      ...item
+      ...item,
+      user_id: user?.id,
     })
     .select()
     .single();
@@ -286,10 +342,12 @@ export async function createRecurringItem(item: Omit<RecurringItem, 'id'>): Prom
 }
 
 export async function updateRecurringItem(id: number, updates: Partial<RecurringItem>): Promise<RecurringItem> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('recurring_items')
     .update(updates)
     .eq('id', id)
+    .eq('user_id', user?.id)
     .select()
     .single();
 
@@ -298,10 +356,12 @@ export async function updateRecurringItem(id: number, updates: Partial<Recurring
 }
 
 export async function deleteRecurringItem(id: number): Promise<void> {
+  const user = await getCurrentUser();
   const { error } = await supabase
     .from('recurring_items')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', user?.id);
 
   if (error) throw error;
 }
@@ -309,9 +369,11 @@ export async function deleteRecurringItem(id: number): Promise<void> {
 // ==================== CATEGORY BUDGETS ====================
 
 export async function getCategoryBudgets(month?: string): Promise<CategoryBudget[]> {
+  const user = await getCurrentUser();
   let query = supabase
     .from('category_budgets')
-    .select('*');
+    .select('*')
+    .eq('user_id', user?.id);
 
   if (month) {
     query = query.eq('month', month);
@@ -324,10 +386,12 @@ export async function getCategoryBudgets(month?: string): Promise<CategoryBudget
 }
 
 export async function getCategoryBudgetById(id: number): Promise<CategoryBudget | null> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('category_budgets')
     .select('*')
     .eq('id', id)
+    .eq('user_id', user?.id)
     .single();
 
   if (error) throw error;
@@ -335,10 +399,12 @@ export async function getCategoryBudgetById(id: number): Promise<CategoryBudget 
 }
 
 export async function createCategoryBudget(budget: Omit<CategoryBudget, 'id'>): Promise<CategoryBudget> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('category_budgets')
     .insert({
-      ...budget
+      ...budget,
+      user_id: user?.id,
     })
     .select()
     .single();
@@ -348,10 +414,12 @@ export async function createCategoryBudget(budget: Omit<CategoryBudget, 'id'>): 
 }
 
 export async function updateCategoryBudget(id: number, updates: Partial<CategoryBudget>): Promise<CategoryBudget> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('category_budgets')
     .update(updates)
     .eq('id', id)
+    .eq('user_id', user?.id)
     .select()
     .single();
 
@@ -360,10 +428,12 @@ export async function updateCategoryBudget(id: number, updates: Partial<Category
 }
 
 export async function deleteCategoryBudget(id: number): Promise<void> {
+  const user = await getCurrentUser();
   const { error } = await supabase
     .from('category_budgets')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', user?.id);
 
   if (error) throw error;
 }
@@ -371,9 +441,11 @@ export async function deleteCategoryBudget(id: number): Promise<void> {
 // ==================== WISHLIST ITEMS ====================
 
 export async function getWishlistItems(): Promise<WishlistItem[]> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('wishlist_items')
     .select('*')
+    .eq('user_id', user?.id)
     .order('priority', { ascending: false })
     .order('id', { ascending: false });
 
@@ -382,10 +454,12 @@ export async function getWishlistItems(): Promise<WishlistItem[]> {
 }
 
 export async function getWishlistItemById(id: number): Promise<WishlistItem | null> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('wishlist_items')
     .select('*')
     .eq('id', id)
+    .eq('user_id', user?.id)
     .single();
 
   if (error) throw error;
@@ -393,10 +467,12 @@ export async function getWishlistItemById(id: number): Promise<WishlistItem | nu
 }
 
 export async function createWishlistItem(item: Omit<WishlistItem, 'id'>): Promise<WishlistItem> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('wishlist_items')
     .insert({
-      ...item
+      ...item,
+      user_id: user?.id,
     })
     .select()
     .single();
@@ -406,10 +482,12 @@ export async function createWishlistItem(item: Omit<WishlistItem, 'id'>): Promis
 }
 
 export async function updateWishlistItem(id: number, updates: Partial<WishlistItem>): Promise<WishlistItem> {
+  const user = await getCurrentUser();
   const { data, error } = await supabase
     .from('wishlist_items')
     .update(updates)
     .eq('id', id)
+    .eq('user_id', user?.id)
     .select()
     .single();
 
@@ -418,10 +496,12 @@ export async function updateWishlistItem(id: number, updates: Partial<WishlistIt
 }
 
 export async function deleteWishlistItem(id: number): Promise<void> {
+  const user = await getCurrentUser();
   const { error } = await supabase
     .from('wishlist_items')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', user?.id);
 
   if (error) throw error;
 }
@@ -430,10 +510,12 @@ export async function deleteWishlistItem(id: number): Promise<void> {
 
 export async function initializeDefaultData(): Promise<void> {
   try {
-    // Check if data already exists
+    const user = await getCurrentUser();
+    // Check if data already exists for this user
     const { data: existingAccounts } = await supabase
       .from('accounts')
       .select('id')
+      .eq('user_id', user?.id)
       .limit(1);
 
     if (existingAccounts && existingAccounts.length > 0) {

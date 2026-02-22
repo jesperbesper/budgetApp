@@ -1,5 +1,7 @@
 import { ReactNode } from 'react';
 import { NavLink } from '@/components/NavLink';
+import { Button } from '@/components/ui/button';
+import { signOut } from '@/lib/db';
 import { 
   LayoutDashboard, 
   ArrowLeftRight, 
@@ -7,7 +9,8 @@ import {
   FolderTree, 
   Repeat, 
   Heart, 
-  Settings as SettingsIcon 
+  Settings as SettingsIcon,
+  LogOut
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -32,7 +35,7 @@ export default function Layout({ children }: LayoutProps) {
         <div className="container mx-auto px-4">
           <div className="flex h-16 items-center justify-between">
             <h1 className="text-xl font-bold text-primary">Budget App</h1>
-            <div className="flex gap-1">
+            <div className="flex items-center gap-1">
               {navItems.map((item) => (
                 <NavLink
                   key={item.to}
@@ -44,6 +47,15 @@ export default function Layout({ children }: LayoutProps) {
                   <span>{item.label}</span>
                 </NavLink>
               ))}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => signOut()}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 hover:text-destructive ml-2"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Logout</span>
+              </Button>
             </div>
           </div>
         </div>
@@ -51,8 +63,17 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Mobile Header - Top */}
       <header className="md:hidden border-b border-border bg-card sticky top-0 z-50">
-        <div className="flex h-14 items-center justify-center px-4">
+        <div className="flex h-14 items-center justify-between px-4">
+          <div className="w-10" />
           <h1 className="text-lg font-bold text-primary">Budget App</h1>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => signOut()}
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            <LogOut className="h-5 w-5" />
+          </Button>
         </div>
       </header>
 
