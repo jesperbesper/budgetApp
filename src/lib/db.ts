@@ -1,49 +1,16 @@
-// Local-first database using IndexedDB for structured data storage
-import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import { createClient } from '@supabase/supabase-js';
 
-interface BudgetDB extends DBSchema {
-  accounts: {
-    key: number;
-    value: Account;
-    indexes: { 'by-active': number };
-  };
-  categories: {
-    key: number;
-    value: Category;
-    indexes: { 'by-active': number };
-  };
-  transactions: {
-    key: number;
-    value: Transaction;
-    indexes: { 'by-date': string; 'by-account': number; 'by-category': number };
-  };
-  recurring_items: {
-    key: number;
-    value: RecurringItem;
-    indexes: { 'by-active': number };
-  };
-  category_budgets: {
-    key: number;
-    value: CategoryBudget;
-    indexes: { 'by-month': string; 'by-category': number };
-  };
-  wishlist_items: {
-    key: number;
-    value: WishlistItem;
-    indexes: { 'by-status': string };
-  };
-  settings: {
-    key: string;
-    value: string;
-  };
-}
+const supabase = createClient(
+  'https://qncbeobhcqantygexhup.supabase.co',
+  'sb_publishable_NBoQkjQ6AH17bYk3Nrmj4w_RwkKhgC0'
+);
 
+// Interfaces
 export interface Account {
   id?: number;
   name: string;
   type: 'checking' | 'savings' | 'cash' | 'credit';
   initial_balance: number;
-  created_at: string;
   active: boolean;
 }
 
@@ -53,7 +20,6 @@ export interface Category {
   group_name: string | null;
   is_default: boolean;
   active: boolean;
-  created_at: string;
 }
 
 export interface Transaction {
@@ -67,7 +33,6 @@ export interface Transaction {
   to_account_id: number | null;
   note: string | null;
   tags: string | null;
-  created_at: string;
 }
 
 export interface RecurringItem {
@@ -79,7 +44,6 @@ export interface RecurringItem {
   type: 'income' | 'expense';
   day_of_month: number;
   active: boolean;
-  created_at: string;
 }
 
 export interface CategoryBudget {
@@ -87,7 +51,6 @@ export interface CategoryBudget {
   category_id: number;
   month: string;
   amount: number;
-  created_at: string;
 }
 
 export interface WishlistItem {
@@ -98,109 +61,437 @@ export interface WishlistItem {
   priority: 'low' | 'medium' | 'high';
   deadline: string | null;
   status: 'active' | 'completed' | 'cancelled';
-  created_at: string;
   completed_at: string | null;
 }
 
-let dbInstance: IDBPDatabase<BudgetDB> | null = null;
+// ==================== ACCOUNTS ====================
 
-export async function getDB() {
-  if (dbInstance) return dbInstance;
+export async function getAccounts(): Promise<Account[]> {
+  const { data, error } = await supabase
+    .from('accounts')
+    .select('*')
+    .order('id', { ascending: true });
 
-  dbInstance = await openDB<BudgetDB>('budget-app', 1, {
-    upgrade(db) {
-      // Accounts
-      if (!db.objectStoreNames.contains('accounts')) {
-        const accountStore = db.createObjectStore('accounts', { keyPath: 'id', autoIncrement: true });
-        accountStore.createIndex('by-active', 'active');
-      }
-
-      // Categories
-      if (!db.objectStoreNames.contains('categories')) {
-        const categoryStore = db.createObjectStore('categories', { keyPath: 'id', autoIncrement: true });
-        categoryStore.createIndex('by-active', 'active');
-      }
-
-      // Transactions
-      if (!db.objectStoreNames.contains('transactions')) {
-        const transactionStore = db.createObjectStore('transactions', { keyPath: 'id', autoIncrement: true });
-        transactionStore.createIndex('by-date', 'date');
-        transactionStore.createIndex('by-account', 'account_id');
-        transactionStore.createIndex('by-category', 'category_id');
-      }
-
-      // Recurring Items
-      if (!db.objectStoreNames.contains('recurring_items')) {
-        const recurringStore = db.createObjectStore('recurring_items', { keyPath: 'id', autoIncrement: true });
-        recurringStore.createIndex('by-active', 'active');
-      }
-
-      // Category Budgets
-      if (!db.objectStoreNames.contains('category_budgets')) {
-        const budgetStore = db.createObjectStore('category_budgets', { keyPath: 'id', autoIncrement: true });
-        budgetStore.createIndex('by-month', 'month');
-        budgetStore.createIndex('by-category', 'category_id');
-      }
-
-      // Wishlist Items
-      if (!db.objectStoreNames.contains('wishlist_items')) {
-        const wishlistStore = db.createObjectStore('wishlist_items', { keyPath: 'id', autoIncrement: true });
-        wishlistStore.createIndex('by-status', 'status');
-      }
-
-      // Settings
-      if (!db.objectStoreNames.contains('settings')) {
-        db.createObjectStore('settings');
-      }
-    },
-  });
-
-  return dbInstance;
+  if (error) throw error;
+  return data || [];
 }
 
-// Initialize with default data
-export async function initializeDefaultData() {
-  const db = await getDB();
-  
-  // Check if already initialized
-  const hasAccounts = (await db.count('accounts')) > 0;
-  if (hasAccounts) return;
+export async function getAccountById(id: number): Promise<Account | null> {
+  const { data, error } = await supabase
+    .from('accounts')
+    .select('*')
+    .eq('id', id)
+    .single();
 
-  // Create default accounts
-  const mainAccount: Account = {
-    name: 'Main',
-    type: 'checking',
-    initial_balance: 0,
-    created_at: new Date().toISOString(),
-    active: true,
-  };
-  const savingsAccount: Account = {
-    name: 'Savings',
-    type: 'savings',
-    initial_balance: 0,
-    created_at: new Date().toISOString(),
-    active: true,
-  };
+  if (error) throw error;
+  return data;
+}
 
-  await db.add('accounts', mainAccount);
-  await db.add('accounts', savingsAccount);
+export async function createAccount(account: Omit<Account, 'id'>): Promise<Account> {
+  const { data, error } = await supabase
+    .from('accounts')
+    .insert({
+      ...account
+    })
+    .select()
+    .single();
 
-  // Create default categories
-  const defaultCategories: Omit<Category, 'id'>[] = [
-    // Essentials
-    { name: 'Rent', group_name: 'Essentials', is_default: true, active: true, created_at: new Date().toISOString() },
-    { name: 'Groceries', group_name: 'Essentials', is_default: true, active: true, created_at: new Date().toISOString() },
-    { name: 'Utilities', group_name: 'Essentials', is_default: true, active: true, created_at: new Date().toISOString() },
-    // Lifestyle
-    { name: 'Entertainment', group_name: 'Lifestyle', is_default: true, active: true, created_at: new Date().toISOString() },
-    { name: 'Eating out', group_name: 'Lifestyle', is_default: true, active: true, created_at: new Date().toISOString() },
-    { name: 'Shopping', group_name: 'Lifestyle', is_default: true, active: true, created_at: new Date().toISOString() },
-    // Savings
-    { name: 'General savings', group_name: 'Savings', is_default: true, active: true, created_at: new Date().toISOString() },
-    { name: 'Wishlist purchases', group_name: 'Savings', is_default: true, active: true, created_at: new Date().toISOString() },
-  ];
+  if (error) throw error;
+  return data;
+}
 
-  for (const category of defaultCategories) {
-    await db.add('categories', category as Category);
+export async function updateAccount(id: number, updates: Partial<Account>): Promise<Account> {
+  const { data, error } = await supabase
+    .from('accounts')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteAccount(id: number): Promise<void> {
+  const { error } = await supabase
+    .from('accounts')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+// ==================== CATEGORIES ====================
+
+export async function getCategories(): Promise<Category[]> {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('*')
+    .order('group_name', { ascending: true })
+    .order('name', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getCategoryById(id: number): Promise<Category | null> {
+  const { data, error } = await supabase
+    .from('categories')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function createCategory(category: Omit<Category, 'id'>): Promise<Category> {
+  const { data, error } = await supabase
+    .from('categories')
+    .insert({
+      ...category
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateCategory(id: number, updates: Partial<Category>): Promise<Category> {
+  const { data, error } = await supabase
+    .from('categories')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteCategory(id: number): Promise<void> {
+  const { error } = await supabase
+    .from('categories')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+// ==================== TRANSACTIONS ====================
+
+export async function getTransactions(): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .order('date', { ascending: false })
+    .order('id', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getTransactionById(id: number): Promise<Transaction | null> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getTransactionsByDateRange(startDate: string, endDate: string): Promise<Transaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .gte('date', startDate)
+    .lte('date', endDate)
+    .order('date', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createTransaction(transaction: Omit<Transaction, 'id'>): Promise<Transaction> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .insert({
+      ...transaction
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateTransaction(id: number, updates: Partial<Transaction>): Promise<Transaction> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteTransaction(id: number): Promise<void> {
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+// ==================== RECURRING ITEMS ====================
+
+export async function getRecurringItems(): Promise<RecurringItem[]> {
+  const { data, error } = await supabase
+    .from('recurring_items')
+    .select('*')
+    .order('day_of_month', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getRecurringItemById(id: number): Promise<RecurringItem | null> {
+  const { data, error } = await supabase
+    .from('recurring_items')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function createRecurringItem(item: Omit<RecurringItem, 'id'>): Promise<RecurringItem> {
+  const { data, error } = await supabase
+    .from('recurring_items')
+    .insert({
+      ...item
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateRecurringItem(id: number, updates: Partial<RecurringItem>): Promise<RecurringItem> {
+  const { data, error } = await supabase
+    .from('recurring_items')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteRecurringItem(id: number): Promise<void> {
+  const { error } = await supabase
+    .from('recurring_items')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+// ==================== CATEGORY BUDGETS ====================
+
+export async function getCategoryBudgets(month?: string): Promise<CategoryBudget[]> {
+  let query = supabase
+    .from('category_budgets')
+    .select('*');
+
+  if (month) {
+    query = query.eq('month', month);
+  }
+
+  const { data, error } = await query.order('id', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getCategoryBudgetById(id: number): Promise<CategoryBudget | null> {
+  const { data, error } = await supabase
+    .from('category_budgets')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function createCategoryBudget(budget: Omit<CategoryBudget, 'id'>): Promise<CategoryBudget> {
+  const { data, error } = await supabase
+    .from('category_budgets')
+    .insert({
+      ...budget
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateCategoryBudget(id: number, updates: Partial<CategoryBudget>): Promise<CategoryBudget> {
+  const { data, error } = await supabase
+    .from('category_budgets')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteCategoryBudget(id: number): Promise<void> {
+  const { error } = await supabase
+    .from('category_budgets')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+// ==================== WISHLIST ITEMS ====================
+
+export async function getWishlistItems(): Promise<WishlistItem[]> {
+  const { data, error } = await supabase
+    .from('wishlist_items')
+    .select('*')
+    .order('priority', { ascending: false })
+    .order('id', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getWishlistItemById(id: number): Promise<WishlistItem | null> {
+  const { data, error } = await supabase
+    .from('wishlist_items')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function createWishlistItem(item: Omit<WishlistItem, 'id'>): Promise<WishlistItem> {
+  const { data, error } = await supabase
+    .from('wishlist_items')
+    .insert({
+      ...item
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateWishlistItem(id: number, updates: Partial<WishlistItem>): Promise<WishlistItem> {
+  const { data, error } = await supabase
+    .from('wishlist_items')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteWishlistItem(id: number): Promise<void> {
+  const { error } = await supabase
+    .from('wishlist_items')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+// ==================== INITIALIZATION ====================
+
+export async function initializeDefaultData(): Promise<void> {
+  try {
+    // Check if data already exists
+    const { data: existingAccounts } = await supabase
+      .from('accounts')
+      .select('id')
+      .limit(1);
+
+    if (existingAccounts && existingAccounts.length > 0) {
+      return; // Data already initialized
+    }
+
+    // Create default accounts
+    const defaultAccounts = [
+      { name: 'Checking', type: 'checking' as const, initial_balance: 0, active: true },
+      { name: 'Savings', type: 'savings' as const, initial_balance: 0, active: true },
+    ];
+
+    for (const account of defaultAccounts) {
+      await createAccount(account);
+    }
+
+    // Create default categories
+    const defaultCategories = [
+      { name: 'Salary', group_name: 'Income', is_default: true, active: true },
+      { name: 'Freelance', group_name: 'Income', is_default: true, active: true },
+      { name: 'Other Income', group_name: 'Income', is_default: true, active: true },
+
+      { name: 'Groceries', group_name: 'Food & Dining', is_default: true, active: true },
+      { name: 'Restaurants', group_name: 'Food & Dining', is_default: true, active: true },
+
+      { name: 'Rent/Mortgage', group_name: 'Housing', is_default: true, active: true },
+      { name: 'Utilities', group_name: 'Housing', is_default: true, active: true },
+
+      { name: 'Gas', group_name: 'Transportation', is_default: true, active: true },
+      { name: 'Public Transit', group_name: 'Transportation', is_default: true, active: true },
+
+      { name: 'Movies & Entertainment', group_name: 'Entertainment', is_default: true, active: true },
+      { name: 'Hobbies', group_name: 'Entertainment', is_default: true, active: true },
+
+      { name: 'Clothing', group_name: 'Shopping', is_default: true, active: true },
+      { name: 'Electronics', group_name: 'Shopping', is_default: true, active: true },
+
+      { name: 'Doctor', group_name: 'Healthcare', is_default: true, active: true },
+      { name: 'Pharmacy', group_name: 'Healthcare', is_default: true, active: true },
+
+      { name: 'Other', group_name: 'Other', is_default: true, active: true },
+    ];
+
+    for (const category of defaultCategories) {
+      await createCategory(category);
+    }
+
+    console.log('Default data initialized successfully');
+  } catch (error) {
+    console.error('Error initializing default data:', error);
+    throw error;
   }
 }
+
+// Export supabase client for direct access if needed
+export function getDB() {
+  return supabase;
+}
+
+// Export supabase client for direct access if needed
+export { supabase };

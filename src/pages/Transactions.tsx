@@ -1,25 +1,26 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { getDB, Transaction, Account, Category } from '@/lib/db';
+import { Transaction, Account, Category, getTransactions, getAccounts, getCategories } from '@/lib/db';
 import { Plus } from 'lucide-react';
+import AddTransactionDialog from '@/components/AddTransactionDialog';
 
 export default function Transactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
 
   async function loadData() {
-    const db = await getDB();
-    const allTransactions = await db.getAll('transactions');
-    const allAccounts = await db.getAll('accounts');
-    const allCategories = await db.getAll('categories');
+    const allTransactions = await getTransactions();
+    const allAccounts = await getAccounts();
+    const allCategories = await getCategories();
 
-    setTransactions(allTransactions.reverse());
+    setTransactions(allTransactions);
     setAccounts(allAccounts);
     setCategories(allCategories);
   }
@@ -48,18 +49,24 @@ export default function Transactions() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground">Transactions</h1>
-        <Button>
+    <div className="p-3 md:p-6 space-y-4 md:space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <h1 className="text-2xl md:text-3xl font-bold text-foreground">Transactions</h1>
+        <Button onClick={() => setDialogOpen(true)} className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-2" />
           Add Transaction
         </Button>
       </div>
 
+      <AddTransactionDialog 
+        open={dialogOpen} 
+        onOpenChange={setDialogOpen} 
+        onSuccess={loadData}
+      />
+
       <Card>
         <CardHeader>
-          <CardTitle>All Transactions</CardTitle>
+          <CardTitle className="text-base md:text-lg">All Transactions</CardTitle>
         </CardHeader>
         <CardContent>
           {transactions.length === 0 ? (
@@ -67,42 +74,78 @@ export default function Transactions() {
               No transactions yet. Add your first transaction to get started.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-3 px-4 font-medium">Date</th>
-                    <th className="text-left py-3 px-4 font-medium">Type</th>
-                    <th className="text-left py-3 px-4 font-medium">Account</th>
-                    <th className="text-left py-3 px-4 font-medium">Category</th>
-                    <th className="text-right py-3 px-4 font-medium">Amount</th>
-                    <th className="text-left py-3 px-4 font-medium">Note</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactions.map((transaction) => (
-                    <tr key={transaction.id} className="border-b border-border hover:bg-muted/50">
-                      <td className="py-3 px-4">{transaction.date}</td>
-                      <td className="py-3 px-4">
-                        <span className={`capitalize ${getTypeColor(transaction.type)}`}>
-                          {transaction.type}
+            <>
+              {/* Mobile View - Cards */}
+              <div className="md:hidden space-y-2">
+                {transactions.map((transaction) => {
+                  const category = getCategoryName(transaction.category_id);
+                  return (
+                    <div key={transaction.id} className="p-3 bg-muted/50 rounded-lg space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className={`font-semibold text-sm capitalize ${getTypeColor(transaction.type)}`}>
+                            {transaction.type}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">{category}</p>
+                        </div>
+                        <p className={`font-bold text-base ${getTypeColor(transaction.type)} shrink-0`}>
+                          {transaction.type === 'income' ? '+' : transaction.type === 'expense' ? '-' : '→'} {transaction.amount.toFixed(2)} kr
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{transaction.date}</span>
+                        <span className="truncate ml-2">
+                          {transaction.type === 'transfer'
+                            ? `${getAccountName(transaction.from_account_id)} → ${getAccountName(transaction.to_account_id)}`
+                            : getAccountName(transaction.account_id)}
                         </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        {transaction.type === 'transfer'
-                          ? `${getAccountName(transaction.from_account_id)} → ${getAccountName(transaction.to_account_id)}`
-                          : getAccountName(transaction.account_id)}
-                      </td>
-                      <td className="py-3 px-4">{getCategoryName(transaction.category_id)}</td>
-                      <td className={`py-3 px-4 text-right font-semibold ${getTypeColor(transaction.type)}`}>
-                        {transaction.amount.toFixed(2)} kr
-                      </td>
-                      <td className="py-3 px-4 text-muted-foreground">{transaction.note || '-'}</td>
+                      </div>
+                      {transaction.note && (
+                        <p className="text-xs text-muted-foreground italic truncate">{transaction.note}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop View - Table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-3 px-4 font-medium">Date</th>
+                      <th className="text-left py-3 px-4 font-medium">Type</th>
+                      <th className="text-left py-3 px-4 font-medium">Account</th>
+                      <th className="text-left py-3 px-4 font-medium">Category</th>
+                      <th className="text-right py-3 px-4 font-medium">Amount</th>
+                      <th className="text-left py-3 px-4 font-medium">Note</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {transactions.map((transaction) => (
+                      <tr key={transaction.id} className="border-b border-border hover:bg-muted/50">
+                        <td className="py-3 px-4">{transaction.date}</td>
+                        <td className="py-3 px-4">
+                          <span className={`capitalize ${getTypeColor(transaction.type)}`}>
+                            {transaction.type}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {transaction.type === 'transfer'
+                            ? `${getAccountName(transaction.from_account_id)} → ${getAccountName(transaction.to_account_id)}`
+                            : getAccountName(transaction.account_id)}
+                        </td>
+                        <td className="py-3 px-4">{getCategoryName(transaction.category_id)}</td>
+                        <td className={`py-3 px-4 text-right font-semibold ${getTypeColor(transaction.type)}`}>
+                          {transaction.amount.toFixed(2)} kr
+                        </td>
+                        <td className="py-3 px-4 text-muted-foreground">{transaction.note || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

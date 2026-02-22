@@ -19,7 +19,9 @@ const queryClient = new QueryClient();
 
 const App = () => {
   useEffect(() => {
-    initializeDefaultData();
+    initializeDefaultData().catch((error) => {
+      console.error('Failed to initialize database:', error);
+    });
   }, []);
 
   return (

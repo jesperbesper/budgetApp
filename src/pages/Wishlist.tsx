@@ -3,19 +3,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { getDB, WishlistItem } from '@/lib/db';
+import { WishlistItem, getWishlistItems } from '@/lib/db';
 import { Plus, Target } from 'lucide-react';
+import AddWishlistDialog from '@/components/AddWishlistDialog';
 
 export default function Wishlist() {
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
 
   async function loadData() {
-    const db = await getDB();
-    const allWishlist = await db.getAll('wishlist_items');
+    const allWishlist = await getWishlistItems();
     setWishlistItems(allWishlist);
   }
 
@@ -46,14 +47,20 @@ export default function Wishlist() {
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground">Wishlist</h1>
-        <Button>
+    <div className="p-3 md:p-6 space-y-4 md:space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <h1 className="text-2xl md:text-3xl font-bold text-foreground">Wishlist</h1>
+        <Button onClick={() => setDialogOpen(true)} className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-2" />
           Add Wishlist Item
         </Button>
       </div>
+
+      <AddWishlistDialog 
+        open={dialogOpen} 
+        onOpenChange={setDialogOpen} 
+        onSuccess={loadData}
+      />
 
       {wishlistItems.length === 0 ? (
         <Card>
@@ -67,7 +74,7 @@ export default function Wishlist() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
           {wishlistItems.map((item) => {
             const progress = (item.saved_amount / item.target_amount) * 100;
 
@@ -75,7 +82,7 @@ export default function Wishlist() {
               <Card key={item.id}>
                 <CardHeader>
                   <div className="flex justify-between items-start">
-                    <CardTitle className="text-lg">{item.name}</CardTitle>
+                    <CardTitle className="text-base md:text-lg">{item.name}</CardTitle>
                     <Badge className={getPriorityColor(item.priority)}>
                       {item.priority}
                     </Badge>
