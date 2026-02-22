@@ -1,8 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
-  'https://qncbeobhcqantygexhup.supabase.co',
-  'sb_publishable_NBoQkjQ6AH17bYk3Nrmj4w_RwkKhgC0'
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
 // Interfaces
