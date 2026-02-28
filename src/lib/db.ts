@@ -82,6 +82,22 @@ export interface WishlistItem {
   completed_at: string | null;
 }
 
+export interface ReceiptItem {
+  id?: string;
+  receipt_id: string;
+  raw_name: string;
+  price: number;
+}
+
+export interface Receipt {
+  id: string;
+  receipt_id?: string;
+  store_name: string | null;
+  total: number | null;
+  created_at?: string;
+  receipt_items?: ReceiptItem[];
+}
+
 // ==================== ACCOUNTS ====================
 
 export async function getAccounts(): Promise<Account[]> {
@@ -504,6 +520,56 @@ export async function deleteWishlistItem(id: number): Promise<void> {
     .eq('user_id', user?.id);
 
   if (error) throw error;
+}
+
+// ==================== RECEIPTS ====================
+
+export async function getReceiptWithItems(id: string): Promise<Receipt | null> {
+  const { data, error } = await supabase
+    .from('receipts')
+    .select('*, receipt_items(*)')
+    .eq('id', id)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateReceiptWithItems(
+  id: string,
+  storeName: string | null,
+  total: number,
+  items: Array<{ name: string; price: number }>
+): Promise<void> {
+  // Update receipt metadata
+  const { error: receiptError } = await supabase
+    .from('receipts')
+    .update({ store_name: storeName, total })
+    .eq('id', id);
+
+  if (receiptError) throw receiptError;
+
+  // Replace all items: delete existing, insert new
+  const { error: deleteError } = await supabase
+    .from('receipt_items')
+    .delete()
+    .eq('receipt_id', id);
+
+  if (deleteError) throw deleteError;
+
+  if (items.length > 0) {
+    const newItems = items.map((item) => ({
+      receipt_id: id,
+      raw_name: item.name,
+      price: item.price,
+    }));
+
+    const { error: insertError } = await supabase
+      .from('receipt_items')
+      .insert(newItems);
+
+    if (insertError) throw insertError;
+  }
 }
 
 // ==================== INITIALIZATION ====================

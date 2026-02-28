@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Account, Category, getAccounts, getCategories, createTransaction } from '@/lib/db';
 import { toast } from 'sonner';
+import ReceiptUploadTab from '@/components/ReceiptUploadTab';
 
 interface AddTransactionDialogProps {
   open: boolean;
@@ -27,6 +28,7 @@ export default function AddTransactionDialog({ open, onOpenChange, onSuccess }: 
   const [loading, setLoading] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [inputMode, setInputMode] = useState<'manual' | 'upload'>('manual');
 
   useEffect(() => {
     if (open) {
@@ -114,6 +116,7 @@ export default function AddTransactionDialog({ open, onOpenChange, onSuccess }: 
     setAmount('');
     setNote('');
     setDate(new Date().toISOString().split('T')[0]);
+    setInputMode('manual');
   };
 
   return (
@@ -133,71 +136,110 @@ export default function AddTransactionDialog({ open, onOpenChange, onSuccess }: 
               <TabsTrigger value="transfer">Transfer</TabsTrigger>
             </TabsList>
             
-            <TabsContent value="expense" className="space-y-3 md:space-y-4 mt-4">
-              <div className="grid gap-2">
-                <Label htmlFor="date" className="text-sm">Date</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="text-sm md:text-base"
+            <TabsContent value="expense" className="mt-4">
+              {/* Manual / Upload segmented toggle */}
+              <div className="flex rounded-lg border border-border overflow-hidden mb-4">
+                <button
+                  type="button"
+                  className={`flex-1 py-1.5 text-sm font-medium transition-colors ${
+                    inputMode === 'manual'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => setInputMode('manual')}
+                >
+                  Manual
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 py-1.5 text-sm font-medium transition-colors ${
+                    inputMode === 'upload'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => setInputMode('upload')}
+                >
+                  Upload
+                </button>
+              </div>
+
+              {inputMode === 'manual' && (
+                <div className="space-y-3 md:space-y-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="date" className="text-sm">Date</Label>
+                    <Input
+                      id="date"
+                      type="date"
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      className="text-sm md:text-base"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="amount" className="text-sm">Amount (kr)</Label>
+                    <Input
+                      id="amount"
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      autoFocus
+                      className="text-sm md:text-base"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="account" className="text-sm">Account</Label>
+                    <Select value={accountId} onValueChange={setAccountId}>
+                      <SelectTrigger className="text-sm md:text-base">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {accounts.map((account) => (
+                          <SelectItem key={account.id} value={String(account.id)} className="text-sm md:text-base">
+                            {account.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="category" className="text-sm">Category</Label>
+                    <Select value={categoryId} onValueChange={setCategoryId}>
+                      <SelectTrigger className="text-sm md:text-base">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((category) => (
+                          <SelectItem key={category.id} value={String(category.id)} className="text-sm md:text-base">
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="note" className="text-sm">Note (optional)</Label>
+                    <Textarea
+                      id="note"
+                      placeholder="Add a note..."
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      rows={2}
+                      className="text-sm md:text-base"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {inputMode === 'upload' && (
+                <ReceiptUploadTab
+                  accounts={accounts}
+                  categories={categories}
+                  onSuccess={onSuccess}
+                  onClose={() => onOpenChange(false)}
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="amount" className="text-sm">Amount (kr)</Label>
-                <Input
-                  id="amount"
-                  type="number"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  autoFocus
-                  className="text-sm md:text-base"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="account" className="text-sm">Account</Label>
-                <Select value={accountId} onValueChange={setAccountId}>
-                  <SelectTrigger className="text-sm md:text-base">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {accounts.map((account) => (
-                      <SelectItem key={account.id} value={String(account.id)} className="text-sm md:text-base">
-                        {account.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="category" className="text-sm">Category</Label>
-                <Select value={categoryId} onValueChange={setCategoryId}>
-                  <SelectTrigger className="text-sm md:text-base">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category.id} value={String(category.id)} className="text-sm md:text-base">
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="note" className="text-sm">Note (optional)</Label>
-                <Textarea
-                  id="note"
-                  placeholder="Add a note..."
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  rows={2}
-                  className="text-sm md:text-base"
-                />
-              </div>
+              )}
             </TabsContent>
 
             <TabsContent value="income" className="space-y-3 md:space-y-4 mt-4">
