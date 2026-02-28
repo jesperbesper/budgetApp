@@ -16,12 +16,14 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import LoginPage from "./pages/LoginPage";
 import { initializeDefaultData, supabase } from "./lib/db";
+import { useRef } from "react";
 
 const queryClient = new QueryClient();
 
 const App = () => {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const initializedUserRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Get the initial session
@@ -39,7 +41,8 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || initializedUserRef.current === user.id) return;
+    initializedUserRef.current = user.id;
     initializeDefaultData().catch((error) => {
       console.error('Failed to initialize database:', error);
     });
