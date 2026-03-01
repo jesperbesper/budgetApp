@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Account, Category, getAccounts, getCategories, createTransaction } from '@/lib/db';
 import { toast } from 'sonner';
-import ReceiptUploadTab from '@/components/ReceiptUploadTab';
+import ReceiptUploadTab, { type ReceiptUploadTabHandle, type Phase as ReceiptPhase } from '@/components/ReceiptUploadTab';
 
 interface AddTransactionDialogProps {
   open: boolean;
@@ -29,6 +29,8 @@ export default function AddTransactionDialog({ open, onOpenChange, onSuccess }: 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [inputMode, setInputMode] = useState<'manual' | 'upload'>('manual');
+  const receiptTabRef = useRef<ReceiptUploadTabHandle>(null);
+  const [receiptPhase, setReceiptPhase] = useState<ReceiptPhase>('idle');
 
   useEffect(() => {
     if (open) {
@@ -56,6 +58,12 @@ export default function AddTransactionDialog({ open, onOpenChange, onSuccess }: 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // In upload mode, delegate to ReceiptUploadTab
+    if (inputMode === 'upload') {
+      receiptTabRef.current?.confirm();
+      return;
+    }
     
     if (!amount || parseFloat(amount) <= 0) {
       toast.error('Please enter a valid amount');
@@ -117,6 +125,7 @@ export default function AddTransactionDialog({ open, onOpenChange, onSuccess }: 
     setNote('');
     setDate(new Date().toISOString().split('T')[0]);
     setInputMode('manual');
+    setReceiptPhase('idle');
   };
 
   return (
@@ -234,10 +243,12 @@ export default function AddTransactionDialog({ open, onOpenChange, onSuccess }: 
 
               {inputMode === 'upload' && (
                 <ReceiptUploadTab
+                  ref={receiptTabRef}
                   accounts={accounts}
                   categories={categories}
                   onSuccess={onSuccess}
                   onClose={() => onOpenChange(false)}
+                  onPhaseChange={setReceiptPhase}
                 />
               )}
             </TabsContent>
@@ -379,8 +390,16 @@ export default function AddTransactionDialog({ open, onOpenChange, onSuccess }: 
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} className="w-full sm:w-auto">
-              {loading ? 'Adding...' : 'Add Transaction'}
+            <Button
+              type="submit"
+              disabled={
+                loading ||
+                (inputMode === 'upload' && receiptPhase !== 'review') ||
+                (inputMode === 'upload' && receiptPhase === 'confirming')
+              }
+              className="w-full sm:w-auto"
+            >
+              {(inputMode === 'upload' && receiptPhase === 'confirming') ? 'Saving...' : loading ? 'Adding...' : 'Add Transaction'}
             </Button>
           </DialogFooter>
         </form>

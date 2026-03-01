@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import imageCompression from 'browser-image-compression';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Account, Category, createTransaction, getReceiptWithItems, updateReceiptWithItems } from '@/lib/db';
 import { supabase } from '@/lib/db';
 import { toast } from 'sonner';
-import { Camera, ImageIcon, Trash2, Plus, ScanLine, CheckCircle, Loader2 } from 'lucide-react';
+import { Camera, ImageIcon, Trash2, Plus, ScanLine, Loader2 } from 'lucide-react';
 
 interface EditableItem {
   name: string;
@@ -19,16 +19,23 @@ interface ReceiptUploadTabProps {
   categories: Category[];
   onSuccess: () => void;
   onClose: () => void;
+  onPhaseChange?: (phase: Phase) => void;
 }
 
-type Phase = 'idle' | 'extracting' | 'review' | 'confirming';
+export type Phase = 'idle' | 'extracting' | 'review' | 'confirming';
 
-export default function ReceiptUploadTab({
+export interface ReceiptUploadTabHandle {
+  confirm: () => void;
+  phase: Phase;
+}
+
+const ReceiptUploadTab = forwardRef<ReceiptUploadTabHandle, ReceiptUploadTabProps>(function ReceiptUploadTab({
   accounts,
   categories,
   onSuccess,
   onClose,
-}: ReceiptUploadTabProps) {
+  onPhaseChange,
+}, ref) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
@@ -36,9 +43,17 @@ export default function ReceiptUploadTab({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
 
+  function updatePhase(p: Phase) {
+    setPhase(p);
+    onPhaseChange?.(p);
+  }
+
+  useImperativeHandle(ref, () => ({ confirm: handleConfirm, phase }), [phase]);
+
   // Review state
   const [receiptId, setReceiptId] = useState<string>('');
   const [storeName, setStoreName] = useState('');
+  const [receiptTotal, setReceiptTotal] = useState<string>('');
   const [items, setItems] = useState<EditableItem[]>([]);
   const [accountId, setAccountId] = useState<string>(
     accounts.length > 0 ? String(accounts[0].id) : ''
@@ -48,8 +63,6 @@ export default function ReceiptUploadTab({
   );
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const computedTotal = items.reduce((sum, i) => sum + (parseFloat(i.price) || 0), 0);
-
   // ── File selection ────────────────────────────────────────────────────────
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -57,10 +70,11 @@ export default function ReceiptUploadTab({
     if (!selected) return;
     setFile(selected);
     setPreviewUrl(URL.createObjectURL(selected));
-    setPhase('idle');
+    updatePhase('idle');
     // Reset review state when a new file is chosen
     setReceiptId('');
     setStoreName('');
+    setReceiptTotal('');
     setItems([]);
     // Reset input value so the same file can be re-selected
     e.target.value = '';
@@ -70,51 +84,70 @@ export default function ReceiptUploadTab({
 
   async function handleExtract() {
     if (!file) return;
-    setPhase('extracting');
+    updatePhase('extracting');
 
     try {
       // 1. Compress image
-      const compressed = await imageCompression(file, {
-        maxWidthOrHeight: 1200,
-        useWebWorker: true,
-        initialQuality: 0.7,
-      });
+    //   const compressed = await imageCompression(file, {
+    //     maxWidthOrHeight: 1200,
+    //     useWebWorker: true,
+    //     initialQuality: 0.7,
+    //   });
 
       // 2. Convert to base64
       const base64Image = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve((reader.result as string).split(',')[1]);
         reader.onerror = reject;
-        reader.readAsDataURL(compressed);
+        reader.readAsDataURL(file);
       });
 
-      // 3. Call edge function
+      // 3. Call edge function — debug auth
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      console.log('[Receipt] sessionError:', sessionError);
+      console.log('[Receipt] session exists:', !!sessionData.session);
+      console.log('[Receipt] access_token prefix:', sessionData.session?.access_token?.slice(0, 20));
+      console.log('[Receipt] token expires_at:', sessionData.session?.expires_at);
+      console.log('[Receipt] now:', Math.floor(Date.now() / 1000));
+
+      if (!sessionData.session) throw new Error('Not logged in');
+
+      // Try refreshing the session in case the token is expired
+      const { data: refreshed } = await supabase.auth.refreshSession();
+      const token = refreshed.session?.access_token ?? sessionData.session.access_token;
+      console.log('[Receipt] using token prefix:', token?.slice(0, 20));
+
       const { data, error } = await supabase.functions.invoke('parse-receipts', {
         body: { imageBase64: base64Image },
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
+
+      console.log('[Receipt] invoke error:', error);
+      console.log('[Receipt] invoke data:', data);
 
       if (error) throw error;
 
-      const { receipt_id } = data as { receipt_id: string };
-
-      // 4. Fetch the full receipt + items
+      const { receipt_id } = data as { receipt_id: string };      // 4. Fetch the full receipt + items
       const receipt = await getReceiptWithItems(receipt_id);
       if (!receipt) throw new Error('Receipt not found after parsing');
 
       // 5. Populate review state
       setReceiptId(receipt_id);
       setStoreName(receipt.store_name ?? '');
+      setReceiptTotal(receipt.total != null ? String(receipt.total) : '');
       setItems(
         (receipt.receipt_items ?? []).map((item) => ({
           name: item.raw_name,
           price: String(item.price ?? ''),
         }))
       );
-      setPhase('review');
+      updatePhase('review');
     } catch (err) {
       console.error('Receipt extraction failed:', err);
       toast.error('Failed to extract receipt. Please try again.');
-      setPhase('idle');
+      updatePhase('idle');
     }
   }
 
@@ -139,18 +172,19 @@ export default function ReceiptUploadTab({
       toast.error('Please select an account and category');
       return;
     }
-    if (computedTotal <= 0) {
+    const totalAmount = parseFloat(receiptTotal) || 0;
+    if (totalAmount <= 0) {
       toast.error('Total must be greater than 0');
       return;
     }
 
-    setPhase('confirming');
+    updatePhase('confirming');
     try {
       // Update receipt metadata + items in DB
       await updateReceiptWithItems(
         receiptId,
         storeName.trim() || null,
-        computedTotal,
+        totalAmount,
         items.map((i) => ({ name: i.name, price: parseFloat(i.price) || 0 }))
       );
 
@@ -159,7 +193,7 @@ export default function ReceiptUploadTab({
         account_id: parseInt(accountId),
         date,
         type: 'expense',
-        amount: computedTotal,
+        amount: totalAmount,
         category_id: parseInt(categoryId),
         from_account_id: null,
         to_account_id: null,
@@ -167,13 +201,18 @@ export default function ReceiptUploadTab({
         tags: null,
       });
 
+      // Delegate product category classification to edge function (fire-and-forget)
+      supabase.functions.invoke('delegate-product-categories', {
+        body: { receipt_id: receiptId },
+      }).catch((err) => console.warn('[Receipt] delegate-product-categories failed:', err));
+
       toast.success('Receipt saved and transaction created!');
       onSuccess();
       onClose();
     } catch (err) {
       console.error('Failed to confirm receipt:', err);
       toast.error('Failed to save receipt. Please try again.');
-      setPhase('review');
+      updatePhase('review');
     }
   }
 
@@ -321,10 +360,18 @@ export default function ReceiptUploadTab({
             </Button>
           </div>
 
-          {/* Computed total */}
-          <div className="flex justify-between items-center px-1 py-1.5 bg-muted/50 rounded-md">
-            <span className="text-sm font-medium">Total</span>
-            <span className="text-sm font-bold">{computedTotal.toFixed(2)} kr</span>
+          {/* Receipt total */}
+          <div className="grid gap-1.5">
+            <Label className="text-sm">Total</Label>
+            <Input
+              value={receiptTotal}
+              onChange={(e) => setReceiptTotal(e.target.value)}
+              placeholder="0.00"
+              type="number"
+              step="0.01"
+              className="text-sm"
+              disabled={phase === 'confirming'}
+            />
           </div>
 
           {/* Date */}
@@ -381,27 +428,10 @@ export default function ReceiptUploadTab({
             </Select>
           </div>
 
-          {/* Confirm */}
-          <Button
-            type="button"
-            className="w-full"
-            onClick={handleConfirm}
-            disabled={phase === 'confirming'}
-          >
-            {phase === 'confirming' ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Confirm &amp; Save
-              </>
-            )}
-          </Button>
         </div>
       )}
     </div>
   );
-}
+});
+
+export default ReceiptUploadTab;

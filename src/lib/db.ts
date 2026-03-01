@@ -574,18 +574,41 @@ export async function updateReceiptWithItems(
 
 // ==================== INITIALIZATION ====================
 
-export async function initializeDefaultData(): Promise<void> {
+// In-flight lock: prevents concurrent calls within the same JS session.
+const _initPromises = new Map<string, Promise<void>>();
+
+// localStorage key for a given user — survives page reloads and HMR resets.
+const _lsKey = (userId: string) => `budget_initialized_v1_${userId}`;
+
+export function initializeDefaultData(): Promise<void> {
+  return getCurrentUser().then((user) => {
+    if (!user) return;
+
+    // Fast path: already marked as done in localStorage (survives reloads).
+    if (localStorage.getItem(_lsKey(user.id))) return;
+
+    // In-flight lock: if this session already started the work, share it.
+    if (_initPromises.has(user.id)) return _initPromises.get(user.id)!;
+
+    const promise = _doInitialize(user.id);
+    _initPromises.set(user.id, promise);
+    return promise;
+  });
+}
+
+async function _doInitialize(userId: string): Promise<void> {
   try {
-    const user = await getCurrentUser();
-    // Check if data already exists for this user
+    // Double-check the DB in case another device/session already initialized.
     const { data: existingAccounts } = await supabase
       .from('accounts')
       .select('id')
-      .eq('user_id', user?.id)
+      .eq('user_id', userId)
       .limit(1);
 
     if (existingAccounts && existingAccounts.length > 0) {
-      return; // Data already initialized
+      // Data exists — record in localStorage so we never hit the DB again.
+      localStorage.setItem(_lsKey(userId), '1');
+      return;
     }
 
     // Create default accounts
@@ -629,6 +652,8 @@ export async function initializeDefaultData(): Promise<void> {
       await createCategory(category);
     }
 
+    // Mark as done — prevents any future call from re-running the inserts.
+    localStorage.setItem(_lsKey(userId), '1');
     console.log('Default data initialized successfully');
   } catch (error) {
     console.error('Error initializing default data:', error);
