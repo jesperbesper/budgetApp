@@ -2,14 +2,15 @@ import { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Transaction, Account, Category, CategoryBudget, RecurringItem, getTransactions, getAccounts, getCategories, getCategoryBudgets, getRecurringItems } from '@/lib/db';
+import { Transaction, Account, Category, CategoryBudget, RecurringItem, getTransactions, getAccounts, getCategories, getCategoryBudgets, getRecurringItems, getReceiptAnalysis, ReceiptAnalysisRow } from '@/lib/db';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { TrendingUp, TrendingDown, Wallet, PiggyBank, Target, Calendar, ArrowUpDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, PiggyBank, Target, Calendar, ArrowUpDown, ShoppingCart, Store, Package } from 'lucide-react';
 
 export default function Dashboard() {
   const [currentMonth, setCurrentMonth] = useState<string>(
     new Date().toISOString().slice(0, 7)
   );
+  const [dashboardView, setDashboardView] = useState<'transactions' | 'items'>('transactions');
   const [stats, setStats] = useState({
     totalIncome: 0,
     totalExpenses: 0,
@@ -29,6 +30,13 @@ export default function Dashboard() {
   const [largestTransactions, setLargestTransactions] = useState<{income: Transaction[], expenses: Transaction[]}>({income: [], expenses: []});
   const [dailySpendingData, setDailySpendingData] = useState<Array<{day: number; amount: number}>>([]);
   const [budgetProgress, setBudgetProgress] = useState<Array<{category: string; spent: number; budget: number; percentage: number}>>([]);
+
+  // ── Item analysis state ────────────────────────────────────────────────────
+  const [receiptRows, setReceiptRows] = useState<ReceiptAnalysisRow[]>([]);
+  const [storeStats, setStoreStats] = useState<Array<{store: string; total: number; visits: number; avgBasket: number}>>([]);
+  const [productCategoryStats, setProductCategoryStats] = useState<Array<{name: string; amount: number; percentage: number}>>([]);
+  const [topProducts, setTopProducts] = useState<Array<{name: string; category: string; amount: number; count: number}>>([]);
+  const [uncategorizedAmount, setUncategorizedAmount] = useState(0);
 
   const loadDashboardData = useCallback(async () => {
     const allTransactions = await getTransactions();
@@ -210,6 +218,60 @@ export default function Dashboard() {
     setAccounts(allAccounts);
     setTransactions(monthTransactions);
     setCategories(allCategories);
+
+    // ── Item analysis ─────────────────────────────────────────────────────────
+    const receipts = await getReceiptAnalysis(currentMonth);
+    setReceiptRows(receipts);
+
+    // Spending by store
+    const storeMap = new Map<string, { total: number; visits: number }>();
+    receipts.forEach((r) => {
+      const key = r.store_name?.trim() || 'Unknown store';
+      const prev = storeMap.get(key) ?? { total: 0, visits: 0 };
+      storeMap.set(key, { total: prev.total + (r.total ?? 0), visits: prev.visits + 1 });
+    });
+    setStoreStats(
+      Array.from(storeMap.entries())
+        .map(([store, s]) => ({ store, total: s.total, visits: s.visits, avgBasket: s.total / s.visits }))
+        .sort((a, b) => b.total - a.total)
+    );
+
+    // Spending by product category + top products
+    const catAmountMap = new Map<string, number>();
+    const productMap = new Map<string, { name: string; category: string; amount: number; count: number }>();
+    let uncategorized = 0;
+
+    receipts.forEach((r) => {
+      (r.receipt_items ?? []).forEach((item) => {
+        const price = item.price ?? 0;
+        const catName = item.products?.product_categories?.name ?? null;
+        const productName = item.products?.canonical_name ?? null;
+
+        if (catName) {
+          catAmountMap.set(catName, (catAmountMap.get(catName) ?? 0) + price);
+        } else {
+          uncategorized += price;
+        }
+
+        if (productName) {
+          const prev = productMap.get(productName) ?? { name: productName, category: catName ?? 'Uncategorized', amount: 0, count: 0 };
+          productMap.set(productName, { ...prev, amount: prev.amount + price, count: prev.count + 1 });
+        }
+      });
+    });
+
+    const totalItemSpend = Array.from(catAmountMap.values()).reduce((s, v) => s + v, 0) + uncategorized;
+    setProductCategoryStats(
+      Array.from(catAmountMap.entries())
+        .map(([name, amount]) => ({ name, amount, percentage: totalItemSpend > 0 ? (amount / totalItemSpend) * 100 : 0 }))
+        .sort((a, b) => b.amount - a.amount)
+    );
+    setTopProducts(
+      Array.from(productMap.values())
+        .sort((a, b) => b.amount - a.amount)
+        .slice(0, 10)
+    );
+    setUncategorizedAmount(uncategorized);
   }, [currentMonth]);
 
   useEffect(() => {
@@ -241,7 +303,35 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+      {/* View toggle */}
+      <div className="flex rounded-lg border border-border overflow-hidden w-full sm:w-72">
+        <button
+          type="button"
+          className={`flex-1 py-2 text-sm font-medium transition-colors ${
+            dashboardView === 'transactions'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setDashboardView('transactions')}
+        >
+          Transaction Analysis
+        </button>
+        <button
+          type="button"
+          className={`flex-1 py-2 text-sm font-medium transition-colors ${
+            dashboardView === 'items'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-transparent text-muted-foreground hover:text-foreground'
+          }`}
+          onClick={() => setDashboardView('items')}
+        >
+          Item Analysis
+        </button>
+      </div>
+
+      {/* ── TRANSACTION ANALYSIS ────────────────────────────────────────────── */}
+      {dashboardView === 'transactions' && (<>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs md:text-sm font-medium">Total Income</CardTitle>
@@ -611,6 +701,218 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+      </>)}
+
+      {/* ── ITEM ANALYSIS ───────────────────────────────────────────────────── */}
+      {dashboardView === 'items' && (<>
+        {receiptRows.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-muted-foreground">
+              No receipt data for this month. Upload receipts using the Add Transaction button.
+            </CardContent>
+          </Card>
+        ) : (<>
+
+          {/* Summary KPIs */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-xs md:text-sm font-medium">Total Receipts</CardTitle>
+                <ShoppingCart className="h-4 w-4 text-primary" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-xl md:text-2xl font-bold text-primary">{receiptRows.length}</div>
+                <p className="text-xs text-muted-foreground mt-1">this month</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-xs md:text-sm font-medium">Stores Visited</CardTitle>
+                <Store className="h-4 w-4 text-primary" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-xl md:text-2xl font-bold text-primary">{storeStats.length}</div>
+                <p className="text-xs text-muted-foreground mt-1">unique stores</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-xs md:text-sm font-medium">Avg Basket Size</CardTitle>
+                <Package className="h-4 w-4 text-primary" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-xl md:text-2xl font-bold text-primary">
+                  {receiptRows.length > 0
+                    ? (storeStats.reduce((s, x) => s + x.total, 0) / receiptRows.length).toFixed(2)
+                    : '0.00'} kr
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">per receipt</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Spending by store */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base md:text-lg">Spending by Store</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {storeStats.map((s, i) => (
+                <div key={i} className="space-y-1">
+                  <div className="flex justify-between items-center flex-wrap gap-1">
+                    <span className="font-medium text-sm">{s.store}</span>
+                    <div className="flex gap-2 items-center text-xs text-muted-foreground">
+                      <span>{s.visits} visit{s.visits !== 1 ? 's' : ''}</span>
+                      <span>·</span>
+                      <span>avg {s.avgBasket.toFixed(0)} kr</span>
+                      <span className="font-semibold text-foreground">{s.total.toFixed(2)} kr</span>
+                    </div>
+                  </div>
+                  <Progress
+                    value={(s.total / storeStats[0].total) * 100}
+                    className="h-2"
+                  />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* Spending by store — bar chart */}
+          {storeStats.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base md:text-lg">Store Spending Chart</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={storeStats.map(s => ({ name: s.store, Total: parseFloat(s.total.toFixed(2)), Visits: s.visits }))}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" fontSize={11} angle={-30} textAnchor="end" height={60} />
+                    <YAxis fontSize={12} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="Total" fill="hsl(var(--primary))" radius={[6,6,0,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Spending by product category */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base md:text-lg">Spending by Product Category</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {productCategoryStats.length > 0 ? (
+                  <div className="space-y-3">
+                    {productCategoryStats.map((cat, i) => (
+                      <div key={i} className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium">{cat.name}</span>
+                          <span className="text-xs font-semibold">{cat.amount.toFixed(2)} kr ({cat.percentage.toFixed(1)}%)</span>
+                        </div>
+                        <Progress value={cat.percentage} className="h-2" />
+                      </div>
+                    ))}
+                    {uncategorizedAmount > 0 && (
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-medium text-muted-foreground">Uncategorized items</span>
+                          <span className="text-xs font-semibold text-muted-foreground">{uncategorizedAmount.toFixed(2)} kr</span>
+                        </div>
+                        <Progress value={0} className="h-2" />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-center py-8 text-sm">
+                    No categorized items yet — categories are assigned automatically after upload.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base md:text-lg">Category Distribution</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {productCategoryStats.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={productCategoryStats}
+                        cx="50%" cy="50%"
+                        outerRadius={90}
+                        labelLine={false}
+                        label={({ percentage }) => `${percentage.toFixed(0)}%`}
+                        dataKey="amount"
+                      >
+                        {productCategoryStats.map((_, index) => (
+                          <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(v: number) => `${v.toFixed(2)} kr`} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-muted-foreground text-center py-8">No data</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Top products */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base md:text-lg">Top Products by Spend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {topProducts.length > 0 ? (
+                <div className="space-y-2">
+                  {topProducts.map((p, i) => (
+                    <div key={i} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{p.name}</p>
+                        <p className="text-xs text-muted-foreground">{p.category} · bought {p.count}×</p>
+                      </div>
+                      <span className="text-sm font-bold text-destructive shrink-0">{p.amount.toFixed(2)} kr</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-center py-8 text-sm">No product data yet.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Recent receipts list */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base md:text-lg">Recent Receipts</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {receiptRows.slice(0, 10).map((r) => (
+                  <div key={r.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{r.store_name ?? 'Unknown store'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(r.created_at).toLocaleDateString()} · {r.receipt_items?.length ?? 0} items
+                      </p>
+                    </div>
+                    <span className="text-sm font-bold text-primary shrink-0">{(r.total ?? 0).toFixed(2)} kr</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+        </>)}
+      </>)}
     </div>
   );
 }

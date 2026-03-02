@@ -524,6 +524,53 @@ export async function deleteWishlistItem(id: number): Promise<void> {
 
 // ==================== RECEIPTS ====================
 
+export interface ReceiptAnalysisItem {
+  id: string;
+  raw_name: string;
+  price: number;
+  quantity: number | null;
+  products: {
+    id: string;
+    canonical_name: string;
+    product_categories: { id: string; name: string } | null;
+  } | null;
+}
+
+export interface ReceiptAnalysisRow {
+  id: string;
+  store_name: string | null;
+  total: number | null;
+  created_at: string;
+  receipt_items: ReceiptAnalysisItem[];
+}
+
+export async function getReceiptAnalysis(month: string): Promise<ReceiptAnalysisRow[]> {
+  const start = `${month}-01`;
+  const [year, mon] = month.split('-').map(Number);
+  const nextMonth = mon === 12
+    ? `${year + 1}-01-01`
+    : `${year}-${String(mon + 1).padStart(2, '0')}-01`;
+
+  const { data, error } = await supabase
+    .from('receipts')
+    .select(`
+      id, store_name, total, created_at,
+      receipt_items (
+        id, raw_name, price, quantity,
+        products (
+          id, canonical_name,
+          product_categories ( id, name )
+        )
+      )
+    `)
+    .gte('created_at', start)
+    .lt('created_at', nextMonth)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as unknown as ReceiptAnalysisRow[];
+}
+
 export async function getReceiptWithItems(id: string): Promise<Receipt | null> {
   const { data, error } = await supabase
     .from('receipts')
