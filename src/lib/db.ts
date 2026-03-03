@@ -582,6 +582,42 @@ export async function getReceiptWithItems(id: string): Promise<Receipt | null> {
   return data;
 }
 
+export async function insertReceiptWithItems(
+  storeName: string | null,
+  total: number,
+  items: Array<{ name: string; price: number; quantity: number }>
+): Promise<string> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('Not logged in');
+
+  // Insert receipt row
+  const { data: receipt, error: receiptError } = await supabase
+    .from('receipts')
+    .insert({ user_id: user.id, store_name: storeName, total })
+    .select('id')
+    .single();
+
+  if (receiptError) throw receiptError;
+  const receipt_id: string = receipt.id;
+
+  // Insert receipt items
+  if (items.length > 0) {
+    const { error: itemsError } = await supabase
+      .from('receipt_items')
+      .insert(
+        items.map((item) => ({
+          receipt_id,
+          raw_name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+        }))
+      );
+    if (itemsError) throw itemsError;
+  }
+
+  return receipt_id;
+}
+
 export async function updateReceiptWithItems(
   id: string,
   storeName: string | null,
@@ -589,6 +625,9 @@ export async function updateReceiptWithItems(
   items: Array<{ name: string; price: number }>
 ): Promise<void> {
   // Update receipt metadata
+
+  console.log("CONFIRM CALLED", new Date().toISOString());
+  console.trace();
   const { error: receiptError } = await supabase
     .from('receipts')
     .update({ store_name: storeName, total })

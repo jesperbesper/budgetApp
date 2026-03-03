@@ -37,6 +37,8 @@ export default function Dashboard() {
   const [productCategoryStats, setProductCategoryStats] = useState<Array<{name: string; amount: number; percentage: number}>>([]);
   const [topProducts, setTopProducts] = useState<Array<{name: string; category: string; amount: number; count: number}>>([]);
   const [uncategorizedAmount, setUncategorizedAmount] = useState(0);
+  const [weeklyGroceries, setWeeklyGroceries] = useState<Array<{week: string; amount: number}>>([]);
+  const [groceriesCategoryName, setGroceriesCategoryName] = useState<string>('Groceries');
 
   const loadDashboardData = useCallback(async () => {
     const allTransactions = await getTransactions();
@@ -272,6 +274,37 @@ export default function Dashboard() {
         .slice(0, 10)
     );
     setUncategorizedAmount(uncategorized);
+
+    // ── Weekly groceries spending ─────────────────────────────────────────────
+    const groceriesCat = allCategories.find(
+      (c) => c.name.toLowerCase().includes('groceries') || c.name.toLowerCase().includes('grocery')
+    );
+    setGroceriesCategoryName(groceriesCat?.name ?? 'Groceries');
+
+    const allWeeks = [
+      { week: 'Week 1\n(1–7)',   start: 1,  end: 7  },
+      { week: 'Week 2\n(8–14)',  start: 8,  end: 14 },
+      { week: 'Week 3\n(15–21)', start: 15, end: 21 },
+      { week: 'Week 4\n(22–28)', start: 22, end: 28 },
+      { week: 'Week 5\n(29+)',   start: 29, end: 31 },
+    ];
+
+    const weeklyData = allWeeks.map(({ week, start, end }) => {
+      const amount = groceriesCat
+        ? monthTransactions
+            .filter((t) => {
+              if (t.type !== 'expense' || t.category_id !== groceriesCat.id) return false;
+              const day = parseInt(t.date.split('-')[2]);
+              return day >= start && day <= end;
+            })
+            .reduce((sum, t) => sum + t.amount, 0)
+        : 0;
+      return { week, amount };
+    });
+
+    // Only keep weeks that have started (up to currentDayOfMonth)
+    const relevantWeeks = weeklyData.filter((_, i) => allWeeks[i].start <= currentDayOfMonth);
+    setWeeklyGroceries(relevantWeeks);
   }, [currentMonth]);
 
   useEffect(() => {
@@ -885,6 +918,32 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <p className="text-muted-foreground text-center py-8 text-sm">No product data yet.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Weekly groceries spending */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base md:text-lg">
+                Weekly {groceriesCategoryName} Spending
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {weeklyGroceries.some((w) => w.amount > 0) ? (
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={weeklyGroceries}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="week" fontSize={11} />
+                    <YAxis fontSize={12} tickFormatter={(v) => `${v} kr`} />
+                    <Tooltip formatter={(v: number) => [`${v.toFixed(2)} kr`, groceriesCategoryName]} />
+                    <Bar dataKey="amount" name={groceriesCategoryName} fill="hsl(var(--success))" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-muted-foreground text-center py-8 text-sm">
+                  No {groceriesCategoryName.toLowerCase()} transactions this month.
+                </p>
               )}
             </CardContent>
           </Card>

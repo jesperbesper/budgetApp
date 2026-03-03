@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Account, Category, createTransaction, getReceiptWithItems, updateReceiptWithItems } from '@/lib/db';
+import { Account, Category, createTransaction, insertReceiptWithItems } from '@/lib/db';
 import { supabase } from '@/lib/db';
 import { toast } from 'sonner';
 import { Camera, ImageIcon, Trash2, Plus, ScanLine, Loader2 } from 'lucide-react';
@@ -48,10 +48,7 @@ const ReceiptUploadTab = forwardRef<ReceiptUploadTabHandle, ReceiptUploadTabProp
     onPhaseChange?.(p);
   }
 
-  useImperativeHandle(ref, () => ({ confirm: handleConfirm, phase }), [phase]);
-
   // Review state
-  const [receiptId, setReceiptId] = useState<string>('');
   const [storeName, setStoreName] = useState('');
   const [receiptTotal, setReceiptTotal] = useState<string>('');
   const [items, setItems] = useState<EditableItem[]>([]);
@@ -63,6 +60,11 @@ const ReceiptUploadTab = forwardRef<ReceiptUploadTabHandle, ReceiptUploadTabProp
   );
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useImperativeHandle(ref, () => ({ confirm: handleConfirm, phase }), [
+    phase, accountId, categoryId, storeName, receiptTotal, items, date,
+  ]);
+
   // ── File selection ────────────────────────────────────────────────────────
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -72,7 +74,6 @@ const ReceiptUploadTab = forwardRef<ReceiptUploadTabHandle, ReceiptUploadTabProp
     setPreviewUrl(URL.createObjectURL(selected));
     updatePhase('idle');
     // Reset review state when a new file is chosen
-    setReceiptId('');
     setStoreName('');
     setReceiptTotal('');
     setItems([]);
@@ -129,17 +130,14 @@ const ReceiptUploadTab = forwardRef<ReceiptUploadTabHandle, ReceiptUploadTabProp
 
       if (error) throw error;
 
-      const { receipt_id } = data as { receipt_id: string };      // 4. Fetch the full receipt + items
-      const receipt = await getReceiptWithItems(receipt_id);
-      if (!receipt) throw new Error('Receipt not found after parsing');
+      const parsed = data as { store: string | null; total: number; items: Array<{ name: string; price: number }> };
 
-      // 5. Populate review state
-      setReceiptId(receipt_id);
-      setStoreName(receipt.store_name ?? '');
-      setReceiptTotal(receipt.total != null ? String(receipt.total) : '');
+      // Populate review state directly from response — no DB fetch needed
+      setStoreName(parsed.store ?? '');
+      setReceiptTotal(parsed.total != null ? String(parsed.total) : '');
       setItems(
-        (receipt.receipt_items ?? []).map((item) => ({
-          name: item.raw_name,
+        (parsed.items ?? []).map((item) => ({
+          name: item.name,
           price: String(item.price ?? ''),
         }))
       );
@@ -180,15 +178,14 @@ const ReceiptUploadTab = forwardRef<ReceiptUploadTabHandle, ReceiptUploadTabProp
 
     updatePhase('confirming');
     try {
-      // Update receipt metadata + items in DB
-      await updateReceiptWithItems(
-        receiptId,
+      // 1. Insert receipt + items into DB, get back the receipt_id
+      const newReceiptId = await insertReceiptWithItems(
         storeName.trim() || null,
         totalAmount,
-        items.map((i) => ({ name: i.name, price: parseFloat(i.price) || 0 }))
+        items.map((i) => ({ name: i.name, price: parseFloat(i.price) || 0, quantity: 1 }))
       );
 
-      // Create the expense transaction
+      // 2. Create the expense transaction
       await createTransaction({
         account_id: parseInt(accountId),
         date,
@@ -201,9 +198,9 @@ const ReceiptUploadTab = forwardRef<ReceiptUploadTabHandle, ReceiptUploadTabProp
         tags: null,
       });
 
-      // Delegate product category classification to edge function (fire-and-forget)
+      // 3. Delegate product category classification (fire-and-forget)
       supabase.functions.invoke('delegate-product-categories', {
-        body: { receipt_id: receiptId },
+        body: { receipt_id: newReceiptId },
       }).catch((err) => console.warn('[Receipt] delegate-product-categories failed:', err));
 
       toast.success('Receipt saved and transaction created!');
