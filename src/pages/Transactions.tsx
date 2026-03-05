@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Transaction, Account, Category, getTransactions, getAccounts, getCategories } from '@/lib/db';
-import { Plus } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Transaction, Account, Category, getTransactions, getAccounts, getCategories, deleteTransaction } from '@/lib/db';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
 import AddTransactionDialog from '@/components/AddTransactionDialog';
+import EditTransactionDialog from '@/components/EditTransactionDialog';
 
 export default function Transactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => {
     loadData();
@@ -48,6 +52,17 @@ export default function Transactions() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!deletingTransaction?.id) return;
+    try {
+      await deleteTransaction(deletingTransaction.id);
+      setDeletingTransaction(null);
+      loadData();
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+    }
+  };
+
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -63,6 +78,32 @@ export default function Transactions() {
         onOpenChange={setDialogOpen} 
         onSuccess={loadData}
       />
+
+      {editingTransaction && (
+        <EditTransactionDialog
+          open={!!editingTransaction}
+          onOpenChange={(open) => { if (!open) setEditingTransaction(null); }}
+          onSuccess={loadData}
+          transaction={editingTransaction}
+        />
+      )}
+
+      <AlertDialog open={!!deletingTransaction} onOpenChange={(open) => { if (!open) setDeletingTransaction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Transaction</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this transaction? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card>
         <CardHeader>
@@ -103,6 +144,26 @@ export default function Transactions() {
                       {transaction.note && (
                         <p className="text-xs text-muted-foreground italic truncate">{transaction.note}</p>
                       )}
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 h-7 text-xs"
+                          onClick={() => setEditingTransaction(transaction)}
+                        >
+                          <Pencil className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 h-7 text-xs text-destructive hover:text-destructive"
+                          onClick={() => setDeletingTransaction(transaction)}
+                        >
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Delete
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
@@ -119,6 +180,7 @@ export default function Transactions() {
                       <th className="text-left py-3 px-4 font-medium">Category</th>
                       <th className="text-right py-3 px-4 font-medium">Amount</th>
                       <th className="text-left py-3 px-4 font-medium">Note</th>
+                      <th className="text-right py-3 px-4 font-medium">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -140,6 +202,26 @@ export default function Transactions() {
                           {transaction.amount.toFixed(2)} kr
                         </td>
                         <td className="py-3 px-4 text-muted-foreground">{transaction.note || '-'}</td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7"
+                              onClick={() => setEditingTransaction(transaction)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-destructive hover:text-destructive"
+                              onClick={() => setDeletingTransaction(transaction)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
