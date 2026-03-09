@@ -19,40 +19,43 @@ export default function Accounts() {
 
   async function loadData() {
     try {
-    const allAccounts = (await getAccounts()).filter(a => a.active);
-    const allTransactions = await getTransactions();
+      const allAccounts = (await getAccounts()).filter(a => a.active);
+      const allTransactions = await getTransactions();
 
-    setAccounts(allAccounts);
+      setAccounts(allAccounts);
 
-    // Calculate balances
-    const calculatedBalances: Record<number, number> = {};
-    
-    for (const account of allAccounts) {
-      let balance = account.initial_balance;
+      // Calculate balances
+      const calculatedBalances: Record<number, number> = {};
+      
+      for (const account of allAccounts) {
+        let balance = account.initial_balance;
 
-      // Add income
-      balance += allTransactions
-        .filter((t) => t.type === 'income' && t.account_id === account.id)
-        .reduce((sum, t) => sum + t.amount, 0);
+        // Add income
+        balance += allTransactions
+          .filter((t) => t.type === 'income' && t.account_id === account.id)
+          .reduce((sum, t) => sum + t.amount, 0);
 
-      // Subtract expenses
-      balance -= allTransactions
-        .filter((t) => t.type === 'expense' && t.account_id === account.id)
-        .reduce((sum, t) => sum + t.amount, 0);
+        // Subtract expenses
+        balance -= allTransactions
+          .filter((t) => t.type === 'expense' && t.account_id === account.id)
+          .reduce((sum, t) => sum + t.amount, 0);
 
-      // Handle transfers
-      balance -= allTransactions
-        .filter((t) => t.type === 'transfer' && t.from_account_id === account.id)
-        .reduce((sum, t) => sum + t.amount, 0);
+        // Handle transfers
+        balance -= allTransactions
+          .filter((t) => t.type === 'transfer' && t.from_account_id === account.id)
+          .reduce((sum, t) => sum + t.amount, 0);
 
-      balance += allTransactions
-        .filter((t) => t.type === 'transfer' && t.to_account_id === account.id)
-        .reduce((sum, t) => sum + t.amount, 0);
+        balance += allTransactions
+          .filter((t) => t.type === 'transfer' && t.to_account_id === account.id)
+          .reduce((sum, t) => sum + t.amount, 0);
 
-      calculatedBalances[account.id!] = balance;
+        calculatedBalances[account.id!] = balance;
+      }
+
+      setBalances(calculatedBalances);
+    } finally {
+      setLoading(false);
     }
-
-    setBalances(calculatedBalances);
   }
 
   const handleEdit = (account: Account) => {
