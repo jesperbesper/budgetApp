@@ -6,8 +6,10 @@ import { Progress } from '@/components/ui/progress';
 import { WishlistItem, getWishlistItems } from '@/lib/db';
 import { Plus, Target } from 'lucide-react';
 import AddWishlistDialog from '@/components/AddWishlistDialog';
+import { CardGridSkeleton } from '@/components/PageSkeletons';
 
 export default function Wishlist() {
+  const [loading, setLoading] = useState(true);
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -16,8 +18,12 @@ export default function Wishlist() {
   }, []);
 
   async function loadData() {
-    const allWishlist = await getWishlistItems();
-    setWishlistItems(allWishlist);
+    try {
+      const allWishlist = await getWishlistItems();
+      setWishlistItems(allWishlist);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const getPriorityColor = (priority: string) => {
@@ -45,6 +51,8 @@ export default function Wishlist() {
         return 'bg-muted text-muted-foreground';
     }
   };
+
+  if (loading) return <CardGridSkeleton title="Wishlist" />;
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-6">

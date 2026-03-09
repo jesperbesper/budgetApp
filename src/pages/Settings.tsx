@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Download, Upload, RefreshCw, Calendar, FileText } from 'lucide-react';
 import { Account, Transaction, RecurringItem, getAccounts, getTransactions, getRecurringItems, createTransaction } from '@/lib/db';
 import { toast } from 'sonner';
+import { SettingsSkeleton } from '@/components/PageSkeletons';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,12 +17,17 @@ import {
 } from '@/components/ui/alert-dialog';
 
 export default function Settings() {
+  const [loading, setLoading] = useState(true);
   const [sweeping, setSweeping] = useState(false);
   const [applyingRecurring, setApplyingRecurring] = useState(false);
   const [showSweepDialog, setShowSweepDialog] = useState(false);
   const [sweepAmount, setSweepAmount] = useState(0);
   const [fromAccount, setFromAccount] = useState<Account | null>(null);
   const [toAccount, setToAccount] = useState<Account | null>(null);
+
+  useEffect(() => {
+    setLoading(false);
+  }, []);
 
   const handleExport = () => {
     // TODO: Implement export functionality
@@ -180,6 +186,8 @@ export default function Settings() {
       toast.error('Failed to generate report');
     }
   };
+
+  if (loading) return <SettingsSkeleton />;
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-6">

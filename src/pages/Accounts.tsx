@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Account, Transaction, getAccounts, getTransactions } from '@/lib/db';
 import { Plus, Wallet, Pencil } from 'lucide-react';
 import AddAccountDialog from '@/components/AddAccountDialog';
+import { CardGridSkeleton } from '@/components/PageSkeletons';
 
 export default function Accounts() {
+  const [loading, setLoading] = useState(true);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [balances, setBalances] = useState<Record<number, number>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -16,6 +18,7 @@ export default function Accounts() {
   }, []);
 
   async function loadData() {
+    try {
     const allAccounts = (await getAccounts()).filter(a => a.active);
     const allTransactions = await getTransactions();
 
@@ -67,6 +70,8 @@ export default function Accounts() {
       setEditAccount(undefined);
     }
   };
+
+  if (loading) return <CardGridSkeleton title="Accounts" />;
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-6">

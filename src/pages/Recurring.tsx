@@ -6,6 +6,7 @@ import { RecurringItem, Account, Category, getRecurringItems, getAccounts, getCa
 import { Plus, Calendar, Pencil, Trash2 } from 'lucide-react';
 import AddRecurringDialog from '@/components/AddRecurringDialog';
 import { toast } from 'sonner';
+import { DataTableSkeleton } from '@/components/PageSkeletons';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +19,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 export default function Recurring() {
+  const [loading, setLoading] = useState(true);
   const [recurringItems, setRecurringItems] = useState<RecurringItem[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -31,13 +33,17 @@ export default function Recurring() {
   }, []);
 
   async function loadData() {
-    const allRecurring = await getRecurringItems();
-    const allAccounts = await getAccounts();
-    const allCategories = await getCategories();
+    try {
+      const allRecurring = await getRecurringItems();
+      const allAccounts = await getAccounts();
+      const allCategories = await getCategories();
 
-    setRecurringItems(allRecurring);
-    setAccounts(allAccounts);
-    setCategories(allCategories);
+      setRecurringItems(allRecurring);
+      setAccounts(allAccounts);
+      setCategories(allCategories);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const getAccountName = (id: number) => {
@@ -113,6 +119,8 @@ export default function Recurring() {
       setEditItem(undefined);
     }
   };
+
+  if (loading) return <DataTableSkeleton title="Recurring Items" />;
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-6">

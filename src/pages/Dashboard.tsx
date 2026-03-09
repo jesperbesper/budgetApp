@@ -5,8 +5,10 @@ import { Progress } from '@/components/ui/progress';
 import { Transaction, Account, Category, CategoryBudget, RecurringItem, getTransactions, getAccounts, getCategories, getCategoryBudgets, getRecurringItems, getReceiptAnalysis, ReceiptAnalysisRow } from '@/lib/db';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { TrendingUp, TrendingDown, Wallet, PiggyBank, Target, Calendar, ArrowUpDown, ShoppingCart, Store, Package } from 'lucide-react';
+import { DashboardSkeleton } from '@/components/PageSkeletons';
 
 export default function Dashboard() {
+  const [loading, setLoading] = useState(true);
   const [currentMonth, setCurrentMonth] = useState<string>(
     new Date().toISOString().slice(0, 7)
   );
@@ -305,11 +307,14 @@ export default function Dashboard() {
     // Only keep weeks that have started (up to currentDayOfMonth)
     const relevantWeeks = weeklyData.filter((_, i) => allWeeks[i].start <= currentDayOfMonth);
     setWeeklyGroceries(relevantWeeks);
-  }, [currentMonth]);
+    setLoading(false);
+  }, [currentMonth]);  
 
   useEffect(() => {
     loadDashboardData();
   }, [loadDashboardData]);
+
+  if (loading) return <DashboardSkeleton />;
 
   const chartData = [
     { name: 'Income', value: stats.totalIncome, fill: 'hsl(var(--success))' },

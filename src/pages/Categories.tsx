@@ -5,8 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { Category, getCategories } from '@/lib/db';
 import { Plus } from 'lucide-react';
 import AddCategoryDialog from '@/components/AddCategoryDialog';
+import { CategoryGroupSkeleton } from '@/components/PageSkeletons';
 
 export default function Categories() {
+  const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
   const [groupedCategories, setGroupedCategories] = useState<Record<string, Category[]>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -16,6 +18,7 @@ export default function Categories() {
   }, []);
 
   async function loadData() {
+    try {
     const allCategories = (await getCategories()).filter(c => c.active);
 
     setCategories(allCategories);
@@ -29,7 +32,12 @@ export default function Categories() {
     }, {} as Record<string, Category[]>);
 
     setGroupedCategories(grouped);
+    } finally {
+      setLoading(false);
+    }
   }
+
+  if (loading) return <CategoryGroupSkeleton />;
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-6">

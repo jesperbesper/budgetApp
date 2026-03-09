@@ -6,8 +6,10 @@ import { Transaction, Account, Category, getTransactions, getAccounts, getCatego
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import AddTransactionDialog from '@/components/AddTransactionDialog';
 import EditTransactionDialog from '@/components/EditTransactionDialog';
+import { DataTableSkeleton } from '@/components/PageSkeletons';
 
 export default function Transactions() {
+  const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -20,13 +22,17 @@ export default function Transactions() {
   }, []);
 
   async function loadData() {
-    const allTransactions = await getTransactions();
-    const allAccounts = await getAccounts();
-    const allCategories = await getCategories();
+    try {
+      const allTransactions = await getTransactions();
+      const allAccounts = await getAccounts();
+      const allCategories = await getCategories();
 
-    setTransactions(allTransactions);
-    setAccounts(allAccounts);
-    setCategories(allCategories);
+      setTransactions(allTransactions);
+      setAccounts(allAccounts);
+      setCategories(allCategories);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const getAccountName = (id: number | null) => {
@@ -62,6 +68,8 @@ export default function Transactions() {
       console.error('Error deleting transaction:', error);
     }
   };
+
+  if (loading) return <DataTableSkeleton title="Transactions" />;
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-6">
