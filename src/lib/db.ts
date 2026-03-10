@@ -19,8 +19,8 @@ export async function signOut() {
 }
 
 export async function getCurrentUser() {
-  const { data } = await supabase.auth.getUser();
-  return data.user;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user ?? null;
 }
 
 // Interfaces
