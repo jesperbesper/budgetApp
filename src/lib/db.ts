@@ -697,46 +697,42 @@ async function _doInitialize(userId: string): Promise<void> {
       return;
     }
 
-    // Create default accounts
-    const defaultAccounts = [
-      { name: 'Checking', type: 'checking' as const, initial_balance: 0, active: true },
-      { name: 'Savings', type: 'savings' as const, initial_balance: 0, active: true },
-    ];
+    // Batch-insert all default accounts in a single round-trip.
+    // This collapses what was 18 sequential async operations (each with its own
+    // getCurrentUser() call) into 2 operations, dramatically shrinking the race
+    // window that could cause duplicates when two tabs open simultaneously.
+    const { error: accountsError } = await supabase
+      .from('accounts')
+      .insert([
+        { name: 'Checking', type: 'checking', initial_balance: 0, active: true, user_id: userId },
+        { name: 'Savings', type: 'savings', initial_balance: 0, active: true, user_id: userId },
+      ]);
 
-    for (const account of defaultAccounts) {
-      await createAccount(account);
-    }
+    if (accountsError) throw accountsError;
 
-    // Create default categories
-    const defaultCategories = [
-      { name: 'Salary', group_name: 'Income', is_default: true, active: true },
-      { name: 'Freelance', group_name: 'Income', is_default: true, active: true },
-      { name: 'Other Income', group_name: 'Income', is_default: true, active: true },
+    // Batch-insert all default categories in a single round-trip.
+    const { error: categoriesError } = await supabase
+      .from('categories')
+      .insert([
+        { name: 'Salary', group_name: 'Income', is_default: true, active: true, user_id: userId },
+        { name: 'Freelance', group_name: 'Income', is_default: true, active: true, user_id: userId },
+        { name: 'Other Income', group_name: 'Income', is_default: true, active: true, user_id: userId },
+        { name: 'Groceries', group_name: 'Food & Dining', is_default: true, active: true, user_id: userId },
+        { name: 'Restaurants', group_name: 'Food & Dining', is_default: true, active: true, user_id: userId },
+        { name: 'Rent/Mortgage', group_name: 'Housing', is_default: true, active: true, user_id: userId },
+        { name: 'Utilities', group_name: 'Housing', is_default: true, active: true, user_id: userId },
+        { name: 'Gas', group_name: 'Transportation', is_default: true, active: true, user_id: userId },
+        { name: 'Public Transit', group_name: 'Transportation', is_default: true, active: true, user_id: userId },
+        { name: 'Movies & Entertainment', group_name: 'Entertainment', is_default: true, active: true, user_id: userId },
+        { name: 'Hobbies', group_name: 'Entertainment', is_default: true, active: true, user_id: userId },
+        { name: 'Clothing', group_name: 'Shopping', is_default: true, active: true, user_id: userId },
+        { name: 'Electronics', group_name: 'Shopping', is_default: true, active: true, user_id: userId },
+        { name: 'Doctor', group_name: 'Healthcare', is_default: true, active: true, user_id: userId },
+        { name: 'Pharmacy', group_name: 'Healthcare', is_default: true, active: true, user_id: userId },
+        { name: 'Other', group_name: 'Other', is_default: true, active: true, user_id: userId },
+      ]);
 
-      { name: 'Groceries', group_name: 'Food & Dining', is_default: true, active: true },
-      { name: 'Restaurants', group_name: 'Food & Dining', is_default: true, active: true },
-
-      { name: 'Rent/Mortgage', group_name: 'Housing', is_default: true, active: true },
-      { name: 'Utilities', group_name: 'Housing', is_default: true, active: true },
-
-      { name: 'Gas', group_name: 'Transportation', is_default: true, active: true },
-      { name: 'Public Transit', group_name: 'Transportation', is_default: true, active: true },
-
-      { name: 'Movies & Entertainment', group_name: 'Entertainment', is_default: true, active: true },
-      { name: 'Hobbies', group_name: 'Entertainment', is_default: true, active: true },
-
-      { name: 'Clothing', group_name: 'Shopping', is_default: true, active: true },
-      { name: 'Electronics', group_name: 'Shopping', is_default: true, active: true },
-
-      { name: 'Doctor', group_name: 'Healthcare', is_default: true, active: true },
-      { name: 'Pharmacy', group_name: 'Healthcare', is_default: true, active: true },
-
-      { name: 'Other', group_name: 'Other', is_default: true, active: true },
-    ];
-
-    for (const category of defaultCategories) {
-      await createCategory(category);
-    }
+    if (categoriesError) throw categoriesError;
 
     // Mark as done — prevents any future call from re-running the inserts.
     localStorage.setItem(_lsKey(userId), '1');
